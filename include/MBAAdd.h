@@ -10,6 +10,7 @@
 #ifndef LLVM_TUTOR_MBA_ADD_H
 #define LLVM_TUTOR_MBA_ADD_H
 
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
 
@@ -25,17 +26,6 @@ struct MBAAdd : public llvm::PassInfoMixin<MBAAdd> {
   // decorated with the optnone LLVM attribute. Note that clang -O0 decorates
   // all functions with optnone.
   static bool isRequired() { return true; }
-};
-
-//------------------------------------------------------------------------------
-// Legacy PM interface
-//------------------------------------------------------------------------------
-struct LegacyMBAAdd : public llvm::FunctionPass {
-  static char ID;
-  LegacyMBAAdd() : FunctionPass(ID) {}
-  bool runOnFunction(llvm::Function &F) override;
-
-  MBAAdd Impl;
 };
 
 #endif

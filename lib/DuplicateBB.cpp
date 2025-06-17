@@ -65,11 +65,6 @@
 //    --------------------------------------------------------------------------
 //
 //  USAGE:
-//    1. Legacy Pass Manager:
-//      $ opt -load <BUILD_DIR>/lib/libRIV.so `\`
-//        -load <BUILD_DIR>/lib/libDuplicateBB%shlibext -legacy-duplicate-bb `\`
-//        -S <bitcode-file>
-//    2. New Pass Manager:
 //      $ opt -load-pass-plugin <BUILD_DIR>/lib//libRIV.so `\`
 //      -load-pass-plugin <BUILD_DIR>/lib//libDuplicateBB.so `\`
 //      -passes=duplicate-bb -S <bitcode-file>
@@ -85,8 +80,10 @@
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
+#include "llvm/Support/RandomNumberGenerator.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
@@ -104,15 +101,6 @@ using namespace llvm;
 DuplicateBB::BBToSingleRIVMap
 DuplicateBB::findBBsToDuplicate(Function &F, const RIV::Result &RIVResult) {
   BBToSingleRIVMap BlocksToDuplicate;
-
-  // Get a random number generator. This will be used to choose a context
-  // value for the injected `if-then-else` construct.
-  // FIXME Switch to 'F.getParent()->createRNG("DuplicateBB")' once possible.
-  // This patch implements the necessary API:
-  //    * https://reviews.llvm.org/rG73713f3e5ef2ecf1e5afafa89f76ab89cc06b18e
-  // It should be available in LLVM 11.
-  std::random_device RD;
-  std::mt19937_64 RNG(RD());
 
   for (BasicBlock &BB : F) {
     // Basic blocks which are landing pads are used for handling exceptions.
@@ -134,7 +122,7 @@ DuplicateBB::findBBsToDuplicate(Function &F, const RIV::Result &RIVResult) {
     // Get a random context value from the RIV set
     auto Iter = ReachableValues.begin();
     std::uniform_int_distribution<> Dist(0, ReachableValuesCount - 1);
-    std::advance(Iter, Dist(RNG));
+    std::advance(Iter, Dist(*pRNG));
 
     if (dyn_cast<GlobalValue>(*Iter)) {
       LLVM_DEBUG(errs() << "Random context value is a global variable. "
@@ -248,6 +236,9 @@ void DuplicateBB::cloneBB(BasicBlock &BB, Value *ContextValue,
 
 PreservedAnalyses DuplicateBB::run(llvm::Function &F,
                                    llvm::FunctionAnalysisManager &FAM) {
+  if (!pRNG)
+    pRNG = F.getParent()->createRNG("duplicate-bb");
+  
   BBToSingleRIVMap Targets = findBBsToDuplicate(F, FAM.getResult<RIV>(F));
 
   // This map is used to keep track of the new bindings. Otherwise, the
@@ -262,24 +253,6 @@ PreservedAnalyses DuplicateBB::run(llvm::Function &F,
   DuplicateBBCountStats = DuplicateBBCount;
   return (Targets.empty() ? llvm::PreservedAnalyses::all()
                           : llvm::PreservedAnalyses::none());
-}
-
-bool LegacyDuplicateBB::runOnFunction(llvm::Function &F) {
-  // Find BBs to duplicate
-  DuplicateBB::BBToSingleRIVMap Targets =
-      Impl.findBBsToDuplicate(F, getAnalysis<LegacyRIV>().getRIVMap());
-
-  // This map is used to keep track of the new bindings. Otherwise, the
-  // information from RIV will become obsolete.
-  DuplicateBB::ValueToPhiMap ReMapper;
-
-  // Duplicate
-  for (auto &BB_Ctx : Targets) {
-    Impl.cloneBB(*std::get<0>(BB_Ctx), std::get<1>(BB_Ctx), ReMapper);
-  }
-
-  DuplicateBBCountStats = Impl.DuplicateBBCount;
-  return (Targets.empty() ? false : true);
 }
 
 //------------------------------------------------------------------------------
@@ -304,17 +277,3 @@ extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
 llvmGetPassPluginInfo() {
   return getDuplicateBBPluginInfo();
 }
-
-//------------------------------------------------------------------------------
-// Legacy PM Registration
-//------------------------------------------------------------------------------
-// This method defines how this pass interacts with other passes
-void LegacyDuplicateBB::getAnalysisUsage(AnalysisUsage &Info) const {
-  Info.addRequired<LegacyRIV>();
-}
-
-char LegacyDuplicateBB::ID = 0;
-static RegisterPass<LegacyDuplicateBB> X(/*PassArg=*/"legacy-duplicate-bb",
-                                         /*Name=*/"Duplicate Basic Blocks Pass",
-                                         /*CFGOnly=*/false,
-                                         /*is_analysis=*/false);

@@ -18,10 +18,6 @@
 //    [1] "Writing an LLVM Optimization" by Jonathan Smith
 //
 // USAGE:
-//    1. Legacy PM
-//      opt --load libConvertFCmpEq.dylib --convert-fcmp-eq `\`
-//        --disable-output <input-llvm-file>
-//    2. Manual pass pipeline - new PM
 //      opt --load-pass-plugin libConvertFCmpEq.dylib [--stats] `\`
 //        --passes='convert-fcmp-eq' --disable-output <input-llvm-file>
 //
@@ -51,9 +47,7 @@
 using namespace llvm;
 
 // Unnamed namespace for private functions
-namespace {
-
-FCmpInst *convertFCmpEqInstruction(FCmpInst *FCmp) noexcept {
+static FCmpInst *convertFCmpEqInstruction(FCmpInst *FCmp) noexcept {
   assert(FCmp && "The given fcmp instruction is null");
 
   if (!FCmp->isEquality()) {
@@ -119,11 +113,7 @@ FCmpInst *convertFCmpEqInstruction(FCmpInst *FCmp) noexcept {
   return FCmp;
 }
 
-} // namespace
-
 static constexpr char PassArg[] = "convert-fcmp-eq";
-static constexpr char PassName[] =
-    "Convert floating-point equality comparisons";
 static constexpr char PluginName[] = "ConvertFCmpEq";
 
 #define DEBUG_TYPE ::PassArg
@@ -140,7 +130,7 @@ PreservedAnalyses ConvertFCmpEq::run(Function &Func,
   return Modified ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }
 
-bool ConvertFCmpEq::run(llvm::Function &Func,
+bool ConvertFCmpEq::run(Function &Func,
                         const FindFCmpEq::Result &Comparisons) {
   bool Modified = false;
   // Functions marked explicitly 'optnone' should be ignored since we shouldn't
@@ -161,24 +151,6 @@ bool ConvertFCmpEq::run(llvm::Function &Func,
   return Modified;
 }
 
-ConvertFCmpEqWrapper::ConvertFCmpEqWrapper() : FunctionPass(ID) {}
-
-bool ConvertFCmpEqWrapper::runOnFunction(llvm::Function &Func) {
-  auto &Analysis = getAnalysis<FindFCmpEqWrapper>();
-  ConvertFCmpEq Transform;
-  bool Modified = Transform.run(Func, Analysis.getComparisons());
-  return Modified;
-}
-
-void ConvertFCmpEqWrapper::getAnalysisUsage(llvm::AnalysisUsage &AU) const {
-  // This transform does not modify the control flow graph, so we mark it as
-  // preserved here.
-  AU.setPreservesCFG();
-  // Since we're using the results of FindFCmpEqWrapper, we add it as a required
-  // analysis pass here.
-  AU.addRequired<FindFCmpEqWrapper>();
-}
-
 //-----------------------------------------------------------------------------
 // New PM Registration
 //-----------------------------------------------------------------------------
@@ -188,7 +160,7 @@ PassPluginLibraryInfo getConvertFCmpEqPluginInfo() {
             PB.registerPipelineParsingCallback(
                 [&](StringRef Name, FunctionPassManager &FPM,
                     ArrayRef<PassBuilder::PipelineElement>) {
-                  if (Name.equals(PassArg)) {
+                  if (!Name.compare(PassArg)) {
                     FPM.addPass(ConvertFCmpEq());
                     return true;
                   }
@@ -202,14 +174,3 @@ extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
 llvmGetPassPluginInfo() {
   return getConvertFCmpEqPluginInfo();
 }
-
-//-----------------------------------------------------------------------------
-// Legacy PM Registration
-//-----------------------------------------------------------------------------
-
-char ConvertFCmpEqWrapper::ID = 0;
-
-static RegisterPass<ConvertFCmpEqWrapper> X(/*PassArg=*/PassArg,
-                                            /*Name=*/PassName,
-                                            /*CFGOnly=*/false,
-                                            /*is_analysis=*/false);

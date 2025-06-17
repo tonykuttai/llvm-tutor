@@ -15,8 +15,8 @@
 
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Dominators.h"
-#include "llvm/IR/ValueMap.h"
 #include "llvm/Pass.h"
 
 //------------------------------------------------------------------------------
@@ -49,26 +49,6 @@ public:
 
 private:
   llvm::raw_ostream &OS;
-};
-
-//------------------------------------------------------------------------------
-// Legacy PM interface
-//------------------------------------------------------------------------------
-struct LegacyRIV : public llvm::FunctionPass {
-  static char ID;
-  LegacyRIV() : FunctionPass(ID) {}
-  bool runOnFunction(llvm::Function &) override;
-  void print(llvm::raw_ostream &O, llvm::Module const *) const override;
-  void getAnalysisUsage(llvm::AnalysisUsage &Info) const override;
-
-  RIV::Result const &getRIVMap() const { return RIVMap; }
-
-  // The actual mapping computed by this pass. Note that for every invocation
-  // of the compiler, only one instance of this pass is created. This means
-  // that one instance of RIVMap is re-used every-time this pass is run.
-  RIV::Result RIVMap;
-
-  RIV Impl;
 };
 
 #endif // LLVM_TUTOR_RIV_H

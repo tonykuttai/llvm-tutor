@@ -20,6 +20,7 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -49,7 +50,7 @@ static void countStaticCalls(Module &M) {
   ModuleAnalysisManager MAM;
   MAM.registerPass([&] { return StaticCallCounter(); });
 
-  // Register all available module analysis passes defined in PassRegisty.def.
+  // Register all available module analysis passes defined in PassRegistry.def.
   // We only really need PassInstrumentationAnalysis (which is pulled by
   // default by PassBuilder), but to keep this concise, let PassBuilder do all
   // the _heavy-lifting_.

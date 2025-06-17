@@ -20,10 +20,6 @@
 //    [1] "Writing an LLVM Optimization" by Jonathan Smith
 //
 // USAGE:
-//    1. Legacy PM
-//      opt --load libFindFCmpEq.dylib --analyze --find-fcmp-eq `\`
-//        --disable-output <input-llvm-file>
-//    2. Manual pass pipeline - new PM
 //      opt --load-pass-plugin libFindFCmpEq.dylib `\`
 //        --passes='print<find-fcmp-eq>' --disable-output <input-llvm-file>
 //
@@ -37,7 +33,6 @@
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/ModuleSlotTracker.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
@@ -49,9 +44,6 @@
 #include <string>
 
 using namespace llvm;
-
-// Unnamed namespace for internal functions
-namespace {
 
 static void
 printFCmpEqInstructions(raw_ostream &OS, Function &Func,
@@ -72,8 +64,6 @@ printFCmpEqInstructions(raw_ostream &OS, Function &Func,
     OS << '\n';
   }
 }
-
-} // namespace
 
 static constexpr char PassArg[] = "find-fcmp-eq";
 static constexpr char PassName[] =
@@ -111,33 +101,6 @@ PreservedAnalyses FindFCmpEqPrinter::run(Function &Func,
   return PreservedAnalyses::all();
 }
 
-const FindFCmpEq::Result &FindFCmpEqWrapper::getComparisons() const noexcept {
-  return Results;
-}
-
-bool FindFCmpEqWrapper::runOnFunction(llvm::Function &F) {
-  FindFCmpEq Analyzer;
-  Results = Analyzer.run(F);
-  return false;
-}
-
-void FindFCmpEqWrapper::getAnalysisUsage(llvm::AnalysisUsage &AU) const {
-  AU.setPreservesAll();
-}
-
-void FindFCmpEqWrapper::print(llvm::raw_ostream &OS,
-                              const llvm::Module *M /*= nullptr*/) const {
-  if (Results.empty())
-    return;
-
-  // Since this is a function pass, the list of comparison instructions will
-  // all be from the same function. Therefore, it's fine to pass the first
-  // containing function from the results list as the function argument to
-  // printFCmpEqInstructions().
-  Function &Func = *Results.front()->getFunction();
-  printFCmpEqInstructions(OS, Func, Results);
-}
-
 //-----------------------------------------------------------------------------
 // New PM Registration
 //-----------------------------------------------------------------------------
@@ -160,7 +123,7 @@ PassPluginLibraryInfo getFindFCmpEqPluginInfo() {
                     ArrayRef<PassBuilder::PipelineElement>) {
                   std::string PrinterPassElement =
                       formatv("print<{0}>", PassArg);
-                  if (Name.equals(PrinterPassElement)) {
+                  if (!Name.compare(PrinterPassElement)) {
                     FPM.addPass(FindFCmpEqPrinter(llvm::outs()));
                     return true;
                   }
@@ -174,13 +137,3 @@ extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
 llvmGetPassPluginInfo() {
   return getFindFCmpEqPluginInfo();
 }
-
-//-----------------------------------------------------------------------------
-// Legacy PM Registration
-//-----------------------------------------------------------------------------
-char FindFCmpEqWrapper::ID = 0;
-
-static RegisterPass<FindFCmpEqWrapper> X(/*PassArg=*/PassArg,
-                                         /*Name=*/PassName,
-                                         /*CFGOnly=*/false,
-                                         /*is_analysis=*/true);

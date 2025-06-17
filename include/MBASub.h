@@ -10,6 +10,7 @@
 #ifndef LLVM_TUTOR_MBA_SUB_H
 #define LLVM_TUTOR_MBA_SUB_H
 
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
 
@@ -24,17 +25,5 @@ struct MBASub : public llvm::PassInfoMixin<MBASub> {
   // decorated with the optnone LLVM attribute. Note that clang -O0 decorates
   // all functions with optnone.
   static bool isRequired() { return true; }
-};
-
-struct LegacyMBASub : public llvm::FunctionPass {
-  // The address of this static is used to uniquely identify this pass in the
-  // pass registry. The PassManager relies on this address to find instance of
-  // analyses passes and build dependencies on demand.
-  // The value does not matter.
-  static char ID;
-  LegacyMBASub() : FunctionPass(ID) {}
-  bool runOnFunction(llvm::Function &F) override;
-
-  MBASub Impl;
 };
 #endif

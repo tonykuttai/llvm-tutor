@@ -10,6 +10,7 @@
 #ifndef LLVM_TUTOR_MERGEBBS_H
 #define LLVM_TUTOR_MERGEBBS_H
 
+#include "llvm/IR/Instruction.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
 
@@ -49,17 +50,6 @@ struct MergeBB : public llvm::PassInfoMixin<MergeBB> {
   // decorated with the optnone LLVM attribute. Note that clang -O0 decorates
   // all functions with optnone.
   static bool isRequired() { return true; }
-};
-
-//------------------------------------------------------------------------------
-// Legacy PM interface
-//------------------------------------------------------------------------------
-struct LegacyMergeBB : public llvm::FunctionPass {
-  static char ID;
-  LegacyMergeBB() : llvm::FunctionPass(ID) {}
-  bool runOnFunction(llvm::Function &F) override;
-
-  MergeBB Impl;
 };
 
 //------------------------------------------------------------------------------
